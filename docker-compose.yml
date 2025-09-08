@@ -42,6 +42,11 @@ services:
     volumes:
       - ./redis-data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   postgres:
     image: postgres:17-alpine
