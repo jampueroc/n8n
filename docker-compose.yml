@@ -1,0 +1,71 @@
+services:
+  x-shared: &shared
+    restart: always
+    image: docker.n8n.io/n8nio/n8n
+    env_file: .env
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_NON_ROOT_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_NON_ROOT_PASSWORD}
+      - EXECUTIONS_MODE=queue
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_HEALTH_CHECK_ACTIVE=true
+      - N8N_ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    links:
+      - postgres
+      - redis
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  n8n:
+    <<: *shared
+    ports:
+      - 5678:5678
+  
+  n8n-worker:
+    <<: *shared
+    command: worker
+    depends_on:
+      - n8n
+
+  redis:
+    image: redis:8-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis-data:/data
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres
+    env_file: .env
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - TZ=America/Santiago
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_storage:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+
+volumes:
+  db_storage:
+  redis_data:
