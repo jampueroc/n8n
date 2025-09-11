@@ -12,7 +12,7 @@ This project provides a production-ready n8n instance with:
 
 ## Features
 
-- 🚀 **Production Ready**: Configured with queue mode for better performance
+- **Production Ready**: Configured with queue mode for better performance
 - 🔒 **Secure**: Environment-based configuration with encryption key support
 - 📊 **Scalable**: Separate worker instance for background processing
 - 🗄️ **Persistent Storage**: PostgreSQL database with health checks
@@ -79,18 +79,28 @@ This project provides a production-ready n8n instance with:
 
 ## Architecture
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   n8n (Web)     │    │  n8n-worker     │    │    PostgreSQL   │
-│   Port: 5678    │    │  (Background)   │    │    Port: 5432   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-                    ┌─────────────────┐
-                    │      Redis      │
-                    │    Port: 6379   │
-                    └─────────────────┘
+```mermaid
+graph TB
+    subgraph "n8n Platform"
+        A[n8n Web Interface<br/>Port: 5678]
+        B[n8n Worker<br/>Background Processing]
+    end
+    
+    subgraph "Data Layer"
+        C[PostgreSQL Database<br/>Port: 5432]
+        D[Redis Queue<br/>Port: 6379]
+    end
+    
+    A -->|Workflow Execution| B
+    A -->|Store Workflows| C
+    A -->|Queue Jobs| D
+    B -->|Process Jobs| D
+    B -->|Read/Write Data| C
+    
+    style A fill:#e1f5fe
+    style B fill:#f3e5f5
+    style C fill:#e8f5e8
+    style D fill:#fff3e0
 ```
 
 ## Data Persistence
@@ -156,9 +166,48 @@ docker-compose exec -T postgres psql -U postgres n8n < backup.sql
    - Wait for PostgreSQL health check to pass
    - Check database credentials in `.env`
 
-3. **n8n not accessible**
+3. **PostgreSQL user creation issues**
+   - **IMPORTANT**: PostgreSQL converts usernames to lowercase by default
+   - If you get "role does not exist" errors, check that usernames in `.env` are lowercase
+   - Example: Use `n8n_user` instead of `N8N_USER` or `N8n_User`
+   - Verify user exists: `docker-compose exec postgres psql -U postgres -d n8n -c "\du"`
+   - If user creation failed, manually run: `docker-compose exec postgres psql -U postgres -d n8n -f /docker-entrypoint-initdb.d/init-data.sh`
+
+4. **n8n not accessible**
    - Ensure n8n service is running: `docker-compose ps`
    - Check logs: `docker-compose logs n8n`
+
+### Clean Reset Commands
+
+When you need to completely reset the system (⚠️ **WARNING**: This will delete all data):
+
+1. **Stop all services**
+   ```bash
+   docker-compose down
+   ```
+
+2. **Remove all volumes and data**
+   ```bash
+   # Remove Docker volumes
+   docker volume rm n8n_db_storage n8n_n8n_data n8n_redis_data
+   
+   # Remove local directories (if using bind mounts)
+   rm -rf ./n8n-data ./redis-data
+   ```
+
+3. **Clean up containers and images (optional)**
+   ```bash
+   # Remove stopped containers
+   docker container prune -f
+   
+   # Remove unused images
+   docker image prune -f
+   ```
+
+4. **Start fresh**
+   ```bash
+   docker-compose up -d
+   ```
 
 ### Health Checks
 
